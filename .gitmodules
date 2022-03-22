@@ -1,3 +1,9 @@
 [submodule "libunifex"]
 	path = libunifex
 	url = git@github.com:Garcia6l20/libunifex.git
+[submodule "g6-router"]
+	path = g6-router
+	url = git@github.com:Garcia6l20/g6-router.git
+[submodule "ctre"]
+	path = ctre
+	url = https://github.com/hanickadot/compile-time-regular-expressions

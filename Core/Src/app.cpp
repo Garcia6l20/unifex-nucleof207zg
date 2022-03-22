@@ -13,31 +13,15 @@
 #include <unifex/stm32/stm32_bare_context.hpp>
 
 #include <usb.hpp>
+#include <gpio.hpp>
+
+#include <g6/router.hpp>
+
+
 
 extern "C" {
 #include <main.h>
 }
-
-namespace stm32 {
-class gpio {
-public:
-	GPIO_TypeDef *port_;
-	uint16_t pin_;
-
-	void toogle() const noexcept {
-		HAL_GPIO_TogglePin(port_, pin_);
-	}
-
-	void operator=(bool on) const noexcept {
-		HAL_GPIO_WritePin(port_, pin_, on ? GPIO_PIN_SET : GPIO_PIN_RESET);
-	}
-
-	operator bool() const noexcept {
-		return HAL_GPIO_ReadPin(port_, pin_) == GPIO_PIN_SET;
-	}
-};
-}
-
 
 using unifex::task;
 using unifex::when_all;
@@ -67,6 +51,18 @@ extern "C" int application(void) {
     auto red_led = stm32::gpio{LD3_GPIO_Port, LD3_Pin};
 	auto user_btn = stm32::gpio{USER_Btn_GPIO_Port, USER_Btn_Pin};
 
+	g6::router::router commands_router{
+	    g6::router::on<R"(echo (\w+)\r\n)">([](const std::string &value) -> std::string {
+	        return value + "\r\n";
+	    }),
+		g6::router::on<R"(set-led (\w+)\r\n)">([&](const std::string &value) -> std::string {
+	    	blue_led = value.starts_with("on");
+			return "ok\r\n";
+		}),
+	    g6::router::on<R"(.*)">([]() -> std::string {
+	        return "no such command\r\n";
+	    })};
+
     sync_wait(when_all(
     	[&]() -> task<void> {
     		while(true) {
@@ -74,12 +70,14 @@ extern "C" int application(void) {
 
 				// Within IRQ
 
-				std::string str{data.data(), data.size()}; // copy to local stack
-				co_await schedule(scheduler); // schedule for main-loop processing
+				if (data.size()) {
+					std::string str{data.data(), data.size()}; // copy to local stack
+					co_await schedule(scheduler); // schedule for main-loop processing
 
-				// Within main loop
-
-				usb.write(str);
+					// Within main loop
+					auto res = commands_router(str);
+					usb.write(res);
+				}
     		}
     	}(),
 		[&]() -> task<void> {
@@ -88,7 +86,6 @@ extern "C" int application(void) {
     			co_await schedule_at(scheduler, now(scheduler) + 250ms);
     		}
     	}(),
-		led_toggler(blue_led, 1s),
 		led_toggler(red_led, 2s),
 		[&]() -> task<void> {
 
