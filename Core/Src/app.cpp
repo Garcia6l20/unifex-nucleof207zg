@@ -14,6 +14,7 @@
 
 #include <usb.hpp>
 #include <gpio.hpp>
+#include <eth.hpp>
 
 #include <g6/router.hpp>
 
@@ -32,6 +33,8 @@ using unifex::sync_wait;
 
 using namespace std::literals::chrono_literals;
 
+extern ETH_HandleTypeDef heth;
+
 extern "C" int application(void) {
 
 	unifex::stm32_bare_context ctx{};
@@ -44,6 +47,8 @@ extern "C" int application(void) {
 		}
     };
 
+    auto eth = stm32::eth<>{&heth};
+
     auto usb = stm32::usb{};
 
     auto green_led = stm32::gpio{LD1_GPIO_Port, LD1_Pin};
@@ -52,41 +57,47 @@ extern "C" int application(void) {
 	auto user_btn = stm32::gpio{USER_Btn_GPIO_Port, USER_Btn_Pin};
 
 	g6::router::router commands_router{
-	    g6::router::on<R"(echo (\w+)\r\n)">([](const std::string &value) -> std::string {
-	        return value + "\r\n";
+	    g6::router::on<R"(echo (\w+)\r\n)">([](const std::string &value) -> task<std::string> {
+	        co_return value + "\r\n";
 	    }),
-		g6::router::on<R"(set-led (\w+)\r\n)">([&](const std::string &value) -> std::string {
+		g6::router::on<R"(set-led (\w+)\r\n)">([&](const std::string &value) -> task<std::string> {
 	    	blue_led = value.starts_with("on");
-			return "ok\r\n";
+			co_return "ok\r\n";
 		}),
-	    g6::router::on<R"(.*)">([]() -> std::string {
-	        return "no such command\r\n";
+	    g6::router::on<R"(.*)">([]() -> task<std::string> {
+	        co_return "no such command\r\n";
 	    })};
 
     sync_wait(when_all(
-    	[&]() -> task<void> {
-    		while(true) {
-    			auto data = co_await usb.receive();
-
-				// Within IRQ
-
-				if (data.size()) {
-					std::string str{data.data(), data.size()}; // copy to local stack
-					co_await schedule(scheduler); // schedule for main-loop processing
-
-					// Within main loop
-					auto res = commands_router(str);
-					usb.write(res);
-				}
-    		}
-    	}(),
+//    	[&]() -> task<void> {
+//    		while(true) {
+//    			auto data = co_await usb.receive();
+//
+//				// Within IRQ
+//
+//				if (data.size()) {
+//					std::string str{data.data(), data.size()}; // copy to local stack
+//					co_await schedule(scheduler); // schedule for main-loop processing
+//
+//					// Within main loop
+//					auto res = co_await commands_router(str);
+//					usb.write(res);
+//				}
+//    		}
+//    	}(),
 		[&]() -> task<void> {
     		while (true) {
-    			green_led = bool(user_btn);
-    			co_await schedule_at(scheduler, now(scheduler) + 250ms);
+    			std::string_view data = "Hello world !!";
+    			co_await eth.send(std::span{data.data(), data.size()});
     		}
     	}(),
-		led_toggler(red_led, 2s),
+//		[&]() -> task<void> {
+//    		while (true) {
+//    			green_led = bool(user_btn);
+//    			co_await schedule_at(scheduler, now(scheduler) + 250ms);
+//    		}
+//    	}(),
+//		led_toggler(red_led, 2s),
 		[&]() -> task<void> {
 
 			ctx.run();

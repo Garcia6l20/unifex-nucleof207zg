@@ -52,6 +52,11 @@
 			<locationURI>PARENT-3-PROJECT_LOC/STM32Cube/Repository/STM32Cube_FW_F2_V1.9.3/Drivers/STM32F2xx_HAL_Driver/Src/stm32f2xx_hal_dma_ex.c</locationURI>
 		</link>
 		<link>
+			<name>Drivers/STM32F2xx_HAL_Driver/stm32f2xx_hal_eth.c</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/STM32Cube/Repository/STM32Cube_FW_F2_V1.9.3/Drivers/STM32F2xx_HAL_Driver/Src/stm32f2xx_hal_eth.c</locationURI>
+		</link>
+		<link>
 			<name>Drivers/STM32F2xx_HAL_Driver/stm32f2xx_hal_exti.c</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/STM32Cube/Repository/STM32Cube_FW_F2_V1.9.3/Drivers/STM32F2xx_HAL_Driver/Src/stm32f2xx_hal_exti.c</locationURI>
