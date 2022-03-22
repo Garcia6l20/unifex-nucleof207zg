@@ -58,6 +58,13 @@ class eth {
 			instance_->on_tx_complete();
 		}
 	}
+
+	void (*tx_notify_)(void *self) = nullptr;
+	void *tx_notify_self_ = nullptr;
+
+	void (*rx_notify_)(void *self, std::span<const std::byte> data) = nullptr;
+	void *rx_notify_self_ = nullptr;
+
 public:
 	eth(ETH_HandleTypeDef *handle) :
 		handle_{handle} {
@@ -90,16 +97,17 @@ public:
 
 	}
 
-	inline static void (*tx_notify_)(void *self) = nullptr;
-	inline static void *tx_notify_self_ = nullptr;
+	class tx_sender {
 
-	inline static void (*rx_notify_)(void *self, std::span<const std::byte> data) = nullptr;
-	inline static void *rx_notify_self_ = nullptr;
+		eth &driver_;
+		std::span<const std::byte> data_;
 
-	struct tx_sender {
+	public:
 
 		template <typename Receiver>
-		struct operation {
+		class operation {
+			friend class tx_sender;
+
 			Receiver receiver_;
 			tx_sender &sender_;
 
@@ -115,6 +123,8 @@ public:
 				me->sender_.driver_.tx_notify_ = nullptr;
 				unifex::set_value(static_cast<Receiver&&>(me->receiver_), size_t(me->sender_.data_.size()));
 			}
+
+		public:
 
 			void start() noexcept {
 				std::memcpy(sender_.driver_.tx_buffers_[0u], sender_.data_.data(), sender_.data_.size());
@@ -134,9 +144,6 @@ public:
 
 		static constexpr bool sends_done = true;
 
-		eth &driver_;
-		std::span<const std::byte> data_;
-
 		tx_sender(eth &driver, std::span<const std::byte> data) :
 			driver_{driver}, data_{data} {
 		}
@@ -147,11 +154,76 @@ public:
 		}
 	};
 	template <typename Receiver>
-	friend struct tx_sender::operation;
+	friend class tx_sender::operation;
 
 	template <typename T, size_t Ex>
 	auto send(std::span<T, Ex> data) {
 		return tx_sender{*this, std::as_bytes(data)};
+	}
+
+	class rx_sender {
+
+		eth &driver_;
+		std::span<std::byte> data_;
+
+	public:
+
+		template <typename Receiver>
+		class operation {
+			friend class rx_sender;
+
+			Receiver receiver_;
+			rx_sender &sender_;
+
+			template <typename Receiver2>
+			operation(rx_sender &sender, Receiver2 &&r): receiver_{(Receiver2 &&)r}, sender_{sender} {
+				sender.driver_.rx_notify_self_ = this;
+				sender.driver_.rx_notify_ = &operation::on_complete;
+			}
+
+			static void on_complete(void *self, std::span<const std::byte> rx_data) {
+				auto me = static_cast<operation*>(self);
+				me->sender_.driver_.rx_notify_self_ = nullptr;
+				me->sender_.driver_.rx_notify_ = nullptr;
+				memcpy(me->sender_.data_.data(), rx_data.data(), rx_data.size());
+				unifex::set_value(static_cast<Receiver&&>(me->receiver_), size_t(rx_data.size()));
+			}
+
+		public:
+
+			void start() noexcept {
+				std::memcpy(sender_.driver_.tx_buffers_[0u], sender_.data_.data(), sender_.data_.size());
+				if (HAL_ETH_TransmitFrame(sender_.driver_.handle_, sender_.data_.size()) != HAL_OK) {
+					unifex::set_error(static_cast<Receiver&&>(receiver_), std::make_error_code(std::errc::invalid_argument));
+				}
+			}
+		};
+
+		template <
+			template <typename...> class Variant,
+			template <typename...> class Tuple>
+		using value_types = Variant<Tuple<size_t>>;
+
+		template <template <typename...> class Variant>
+		using error_types = Variant<std::error_code, std::exception_ptr>;
+
+		static constexpr bool sends_done = true;
+
+		rx_sender(eth &driver, std::span<std::byte> data) :
+			driver_{driver}, data_{data} {
+		}
+
+		template <typename Receiver>
+		operation<std::remove_cvref_t<Receiver>> connect(Receiver&& r) && {
+		  return operation<std::remove_cvref_t<Receiver>>{*this, (Receiver &&) r};
+		}
+	};
+	template <typename Receiver>
+	friend class rx_sender::operation;
+
+	template <typename T, size_t Ex>
+	auto receive(std::span<T, Ex> data) {
+		return rx_sender{*this, std::as_writable_bytes(data)};
 	}
 
 

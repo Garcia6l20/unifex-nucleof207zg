@@ -86,9 +86,10 @@ extern "C" int application(void) {
 //    		}
 //    	}(),
 		[&]() -> task<void> {
+			std::array<std::byte, 1024u> data{};
     		while (true) {
-    			std::string_view data = "Hello world !!";
-    			co_await eth.send(std::span{data.data(), data.size()});
+    			size_t sz = co_await eth.receive(std::span{data});
+    			co_await eth.send(std::span{data.data(), sz});
     		}
     	}(),
 //		[&]() -> task<void> {
