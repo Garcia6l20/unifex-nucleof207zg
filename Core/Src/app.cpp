@@ -37,7 +37,7 @@ extern "C" int application(void) {
 	unifex::stm32_bare_context ctx{};
     auto scheduler = ctx.get_scheduler();
 
-    auto led_toggler = [&scheduler](stm32::gpio const&gpio, auto delay) -> task<void> {
+    auto led_toggler = [&scheduler](stm32::gpio const&gpio, auto const &delay) -> task<void> {
 		while (true) {
 			co_await schedule_at(scheduler, now(scheduler) + delay);
 			gpio.toogle();
@@ -51,12 +51,18 @@ extern "C" int application(void) {
     auto red_led = stm32::gpio{LD3_GPIO_Port, LD3_Pin};
 	auto user_btn = stm32::gpio{USER_Btn_GPIO_Port, USER_Btn_Pin};
 
+	std::chrono::milliseconds red_delay = 500ms;
+
 	g6::router::router commands_router{
 	    g6::router::on<R"(echo (\w+)\r\n)">([](const std::string &value) -> std::string {
 	        return value + "\r\n";
 	    }),
-		g6::router::on<R"(set-led (\w+)\r\n)">([&](const std::string &value) -> std::string {
+		g6::router::on<R"(set-led (\w+)\r\n)">([&blue_led](const std::string &value) -> std::string {
 	    	blue_led = value.starts_with("on");
+			return "ok\r\n";
+		}),
+		g6::router::on<R"(red-delay (\d+)\r\n)">([&red_delay](int value) -> std::string {
+	    	red_delay = std::chrono::milliseconds{value};
 			return "ok\r\n";
 		}),
 	    g6::router::on<R"(.*)">([]() -> std::string {
@@ -86,7 +92,7 @@ extern "C" int application(void) {
     			co_await schedule_at(scheduler, now(scheduler) + 250ms);
     		}
     	}(),
-		led_toggler(red_led, 2s),
+		led_toggler(red_led, red_delay),
 		[&]() -> task<void> {
 
 			ctx.run();

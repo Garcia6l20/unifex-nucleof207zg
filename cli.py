@@ -25,6 +25,14 @@ def set_led(com: serial.Serial, enable: str):
 
 
 @cli.command()
+@click.argument('VALUE')
+@pass_serial
+def red_delay(com: serial.Serial, value: str):
+    com.write(f'red-delay {value}\r\n'.encode())
+    click.echo(com.readline().decode()[:-2])
+
+
+@cli.command()
 @click.argument('TEXT')
 @pass_serial
 def echo(com: serial.Serial, text: str):
