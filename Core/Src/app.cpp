@@ -8,6 +8,7 @@
 #include <unifex/task.hpp>
 #include <unifex/when_all.hpp>
 #include <unifex/sync_wait.hpp>
+#include <unifex/stop_when.hpp>
 #include <unifex/scheduler_concepts.hpp>
 
 #include <unifex/stm32/stm32_bare_context.hpp>
@@ -17,6 +18,9 @@
 
 #include <g6/router.hpp>
 
+#include <cstring>
+
+#include <memory_resource>
 
 
 extern "C" {
@@ -25,6 +29,7 @@ extern "C" {
 
 using unifex::task;
 using unifex::when_all;
+using unifex::schedule_after;
 using unifex::schedule_at;
 using unifex::schedule;
 using unifex::now;
@@ -71,16 +76,23 @@ extern "C" int application(void) {
 
     sync_wait(when_all(
     	[&]() -> task<void> {
+
+			std::array<std::byte, 1024u> cmd_data;
+			std::pmr::monotonic_buffer_resource pool{ cmd_data.data(), cmd_data.size() };
+			std::pmr::string str{&pool};
+
     		while(true) {
-    			auto data = co_await usb.receive();
+
+    			auto data = co_await (usb.receive() | unifex::stop_when(schedule_after(scheduler, 1s)));
 
 				// Within IRQ
 
 				if (data.size()) {
-					std::string str{data.data(), data.size()}; // copy to local stack
+					str = data; // copy to local stack
 					co_await schedule(scheduler); // schedule for main-loop processing
 
 					// Within main loop
+
 					auto res = commands_router(str);
 					usb.write(res);
 				}

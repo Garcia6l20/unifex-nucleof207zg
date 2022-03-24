@@ -32,6 +32,13 @@
 
 #define UNIFEX_NO_THREADS
 
+#ifndef UNIFEX_ASSERT
+#include <cassert>
+# define UNIFEX_ASSERT assert
+#endif
+
+#define UNIFEX_CLANG_DISABLE_OPTIMIZATION
+
 #if defined(__has_cpp_attribute)
 // prior to clang-10, [[no_unique_address]] leads to bad codegen
 #if __has_cpp_attribute(no_unique_address) && \

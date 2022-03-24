@@ -6,11 +6,12 @@
 
 #pragma once
 
-#include <unifex/receiver_concepts.hpp>
+#include <io_operation_base.hpp>
 
 #include <system_error>
 
 namespace stm32 {
+
 class usb {
 
 public:
@@ -21,12 +22,13 @@ public:
 	struct rx_sender {
 
 	    template <typename Receiver>
-		struct operation {
-	    	Receiver receiver_;
+		struct operation : public io_operation_base<operation, Receiver> {
+
 	    	rx_sender &sender_;
 
-		  	template <typename Receiver2>
-			operation(rx_sender &sender, Receiver2 &&r): receiver_{(Receiver2 &&)r}, sender_{sender} {
+			operation(rx_sender &sender, Receiver &&r) noexcept:
+				io_operation_base<operation, Receiver>{(Receiver &&)r},
+				sender_{sender} {
 				sender.driver_.notify_self_ = this;
 				sender.driver_.notify_ = &operation::on_complete;
 		  	}
@@ -35,10 +37,15 @@ public:
 				auto me = static_cast<operation*>(self);
 				me->sender_.driver_.notify_self_ = nullptr;
 				me->sender_.driver_.notify_ = nullptr;
-				unifex::set_value(static_cast<Receiver&&>(me->receiver_), std::string_view{reinterpret_cast<char*>(data), size});
+
+				std::move(*me).set_value(std::string_view{reinterpret_cast<char*>(data), size});
 			}
 
-		    void start() noexcept {}
+            void stop_io() noexcept {
+				sender_.driver_.notify_self_ = nullptr;
+				sender_.driver_.notify_ = nullptr;
+				std::move(*this).set_value(std::string_view{nullptr, 0u});
+            }
 		};
 
 	    template <

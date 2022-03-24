@@ -13,7 +13,7 @@ def cli(ctx):
     if com_port is None:
         click.secho('Device not found', fg='red')
         return -1
-    ctx.obj = serial.Serial(com_port, baudrate=115200)
+    ctx.obj = serial.Serial(com_port, baudrate=115200, timeout=1)
 
 
 @cli.command()
